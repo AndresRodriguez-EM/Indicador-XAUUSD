@@ -1048,9 +1048,19 @@ if long_sn or short_sn
     rewardBox_sn := box.new(bar_index, tp_sn, bar_index + caja_ancho_sn, ent_sn, border_color = color.new(color.green, 40), bgcolor = color.new(color.green, 85))
     riskBox_sn := box.new(bar_index, ent_sn, bar_index + caja_ancho_sn, sl_sn, border_color = color.new(color.red, 40), bgcolor = color.new(color.red, 85))
 
+    // Notificación push/email con todo el detalle (crea UNA alerta con "Any alert() function call")
+    alert((long_sn ? "🟢 COMPRA XAUUSD" : "🔴 VENTA XAUUSD") +
+      " @ " + str.tostring(ent_sn, "#.##") +
+      "\nSL: " + str.tostring(sl_sn, "#.##") +
+      "  TP: " + str.tostring(tp_sn, "#.##") +
+      "\nLote: " + str.tostring(lote_p, "0.00") +
+      "  RR: " + str.tostring(rr_sniper, "0.0") +
+      "\nSesión: " + (curSess_sn == "NY" ? "New York" : "Londres"), alert.freq_once_per_bar)
+
 // alertcondition() debe estar SIEMPRE en el ámbito global (no dentro de un if)
-alertcondition(long_sn, "BUY Sniper", "COMPRA en {{close}}")
-alertcondition(short_sn, "SELL Sniper", "VENTA en {{close}}")
+alertcondition(long_sn, "BUY Sniper", "🟢 COMPRA XAUUSD en {{close}}")
+alertcondition(short_sn, "SELL Sniper", "🔴 VENTA XAUUSD en {{close}}")
+alertcondition(long_sn or short_sn, "Cualquier entrada Sniper (compra o venta)", "Nueva entrada Sniper en XAUUSD @ {{close}}")
 
 // Marcas persistentes: los plots no consumen el límite de 500 etiquetas, por lo que
 // siguen visibles en todo el histórico aunque las etiquetas antiguas se depuren
