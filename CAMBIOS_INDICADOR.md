@@ -7,6 +7,18 @@ editor Pine de TradingView y añádelo al gráfico de XAUUSD.
 > con **tamaño configurable** (Auto / Normal / Grande / Enorme) y **posición configurable**;
 > `Auto` escala el texto según la pantalla, adaptándose a PC y celular.
 
+## 0. Ajustes anti-stop (v2.4)
+
+Para reducir los SL por perseguir impulsos con stops cortos (típico en las
+parabólicas del oro):
+
+- **SL por ATR más amplio:** múltiplo por defecto **1.5** (antes 1.0). Da aire al
+  stop para que el ruido/mechas no te saquen; a cambio el lote baja (bien para fondeo).
+- **Filtro anti-persecución (nuevo, ON):** rechaza la señal si la vela del gatillo
+  (o la anterior) es un impulso grande — rango > **1.5 × ATR**. Evita entrar al final
+  de un movimiento parabólico justo antes del retroceso. Configurable en "🎯 Sniper Settings".
+  El diagnóstico muestra "Vela de impulso (anti-persecución)" cuando bloquea una señal.
+
 ## 1. Defectos corregidos
 
 | Defecto detectado | Corrección |

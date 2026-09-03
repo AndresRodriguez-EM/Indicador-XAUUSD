@@ -866,8 +866,12 @@ caja_ancho_sn = input.int(15, "Ancho de la caja de riesgo/beneficio (velas)", mi
 // ----- SL/TP por ATR (mas consistente que la estructura SMC, evita distancias erraticas) -----
 use_atr_sl_sn = input.bool(true, "Usar SL/TP por ATR en vez de estructura SMC (recomendado, mas consistente)", group = grp_sniper)
 atr_len_sn = input.int(14, "Periodo ATR (para SL/TP)", group = grp_sniper)
-atr_mult_sl_sn = input.float(1.0, "Multiplo ATR para el SL", step = 0.1, group = grp_sniper)
+atr_mult_sl_sn = input.float(1.5, "Multiplo ATR para el SL", step = 0.1, tooltip = "1.5 recomendado: da aire al SL en alta volatilidad para que el ruido/mechas no te saquen. Sube el número para stops más amplios (lote menor).", group = grp_sniper)
 atr_val_sn = ta.atr(atr_len_sn)
+
+// ----- Filtro anti-persecución (evita entrar al final de un impulso ya extendido) -----
+use_anti_chase_sn = input.bool(true, "Filtro anti-persecución (no entrar tras vela de impulso)", tooltip = "Bloquea la señal si la vela del gatillo (o la anterior) es demasiado grande respecto al ATR. Evita perseguir movimientos parabólicos y entrar justo antes del retroceso.", group = grp_sniper)
+anti_chase_mult_sn = input.float(1.5, "Rango máx. de la vela de entrada (× ATR)", step = 0.1, minval = 0.5, tooltip = "Si el rango (máx-mín) de la vela supera este múltiplo del ATR, se considera impulso y no se entra.", group = grp_sniper)
 
 // ----- Lotaje dinamico segun fuerza de la señal -----
 use_strength_sizing_sn = input.bool(false, "Ajustar lote segun fuerza de la señal (OFF = riesgo fijo del plan)", tooltip = "OFF (recomendado para tu plan): arriesga siempre el monto fijo y el profit es siempre Riesgo × RR. ON: reduce el lote en señales débiles, por lo que profit y riesgo serán menores.", group = grp_sniper)
@@ -942,8 +946,12 @@ curSess_sn = inNy_sn ? "NY" : inLondon_sn ? "LON" : "NONE"
 in_time = curSess_sn != "NONE"
 
 // Señal "cruda" (setup técnico) antes de aplicar la gestión diaria del plan
-long_raw_sn = in_time and c_up and trending_ok_sn and bar_confirmed_sn and smc_trend_ok_up and internal_trend_ok_up and rsi_buy_ok_sn
-short_raw_sn = in_time and c_dn and trending_ok_sn and bar_confirmed_sn and smc_trend_ok_dn and internal_trend_ok_dn
+// Filtro anti-persecución: rechaza la entrada si la vela del gatillo o la previa es un impulso grande
+bigCandle_sn = math.max(high - low, high[1] - low[1]) > anti_chase_mult_sn * atr_val_sn
+chase_ok_sn = not use_anti_chase_sn or not bigCandle_sn
+
+long_raw_sn = in_time and c_up and trending_ok_sn and bar_confirmed_sn and smc_trend_ok_up and internal_trend_ok_up and rsi_buy_ok_sn and chase_ok_sn
+short_raw_sn = in_time and c_dn and trending_ok_sn and bar_confirmed_sn and smc_trend_ok_dn and internal_trend_ok_dn and chase_ok_sn
 
 // --- COMPUERTA DEL PLAN ---
 // Se puede operar solo si: no hay una operación abierta (corrige el bug de sobrescritura),
@@ -1163,8 +1171,8 @@ raw_cross_dn_sn = bar_confirmed_sn and c_dn
 blocked_up_sn = show_diag_sn and raw_cross_up_sn and not long_sn
 blocked_dn_sn = show_diag_sn and raw_cross_dn_sn and not short_sn
 
-reason_up_sn = not in_time ? "Fuera de sesión (Londres/NY)" : not trending_ok_sn ? "ADX bajo (rango)" : not smc_trend_ok_up ? "Tendencia SMC en contra" : not internal_trend_ok_up ? "Estructura interna en contra" : not rsi_buy_ok_sn ? "RSI no suficientemente bajo" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite de la sesión alcanzado" : metaReached_sn ? "Meta de la sesión ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación de la sesión ganó (no va 2ª)" : "Otro"
-reason_dn_sn = not in_time ? "Fuera de sesión (Londres/NY)" : not trending_ok_sn ? "ADX bajo (rango)" : not smc_trend_ok_dn ? "Tendencia SMC en contra" : not internal_trend_ok_dn ? "Estructura interna en contra" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite de la sesión alcanzado" : metaReached_sn ? "Meta de la sesión ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación de la sesión ganó (no va 2ª)" : "Otro"
+reason_up_sn = not in_time ? "Fuera de sesión (Londres/NY)" : not trending_ok_sn ? "ADX bajo (rango)" : not chase_ok_sn ? "Vela de impulso (anti-persecución)" : not smc_trend_ok_up ? "Tendencia SMC en contra" : not internal_trend_ok_up ? "Estructura interna en contra" : not rsi_buy_ok_sn ? "RSI no suficientemente bajo" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite de la sesión alcanzado" : metaReached_sn ? "Meta de la sesión ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación de la sesión ganó (no va 2ª)" : "Otro"
+reason_dn_sn = not in_time ? "Fuera de sesión (Londres/NY)" : not trending_ok_sn ? "ADX bajo (rango)" : not chase_ok_sn ? "Vela de impulso (anti-persecución)" : not smc_trend_ok_dn ? "Tendencia SMC en contra" : not internal_trend_ok_dn ? "Estructura interna en contra" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite de la sesión alcanzado" : metaReached_sn ? "Meta de la sesión ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación de la sesión ganó (no va 2ª)" : "Otro"
 
 // Ancladas al precio (belowbar/abovebar): location.top/bottom se pegan al borde del
 // panel y se deslizan sobre las velas al desplazar el gráfico en vertical
