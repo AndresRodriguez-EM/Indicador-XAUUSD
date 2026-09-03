@@ -3,6 +3,10 @@
 Versión alineada al [Plan de Trading](PLAN_DE_TRADING.md). Copia el `.pine` en el
 editor Pine de TradingView y añádelo al gráfico de XAUUSD.
 
+> **Últimos ajustes:** RR por defecto **2.0** (profit $100 con riesgo $50). Panel de estado
+> con **tamaño configurable** (Auto / Normal / Grande / Enorme) y **posición configurable**;
+> `Auto` escala el texto según la pantalla, adaptándose a PC y celular.
+
 ## 1. Defectos corregidos
 
 | Defecto detectado | Corrección |

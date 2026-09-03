@@ -813,7 +813,7 @@ risk_usd_manual_sn = input.float(50.0, "Riesgo fijo por operación ($) — solo 
 max_lot_sn = input.float(0.20, "Lote máximo permitido (tope de seguridad)", minval = 0.01, step = 0.01, tooltip = "Protege contra SL muy cortos que inflan el lote. Para una cuenta de 5k, 0.10-0.20 es prudente.", group = grp_sniper)
 // @variable riesgo en $ por operación (base, antes del ajuste por fuerza)
 risk_usd = use_pct_risk_sn ? account_size_sn * risk_pct_sn / 100.0 : risk_usd_manual_sn
-rr_sniper = input.float(1.5, "Ratio Riesgo/Beneficio (1.5 a 2.0)", minval = 1.0, step = 0.1, tooltip = "Profit por operación = Riesgo × RR. Riesgo 50 (1% de 5k) y RR 1.5 -> $75. Para ~$100 usa RR 2.0.", group = grp_sniper)
+rr_sniper = input.float(2.0, "Ratio Riesgo/Beneficio (1.5 a 2.0)", minval = 1.0, step = 0.1, tooltip = "Profit por operación = Riesgo × RR. Riesgo 50 (1% de 5k) y RR 2.0 -> $100. Baja a 1.5 para un objetivo más cercano ($75).", group = grp_sniper)
 
 require_confirmed_sn = input.bool(true, "Confirmar solo al cierre de vela (evita repintado)", group = grp_sniper)
 use_adx_sn = input.bool(true, "Filtrar señales en rango con ADX (recomendado)", tooltip = "Evita operar en mercados laterales donde el cruce de RSI da señales falsas.", group = grp_sniper)
@@ -864,6 +864,8 @@ stop_after_win_sn = input.bool(true, "Detener el día tras una operación ganado
 allow_second_after_loss_sn = input.bool(true, "Permitir 2ª entrada solo si la 1ª perdió", tooltip = "Coherente con el plan: tras una pérdida se considera una segunda (y última) entrada.", group = grp_plan)
 cost_per_trade_sn = input.float(0.0, "Costo estimado por operación (spread+comisión, $)", minval = 0, tooltip = "Para XAUUSD suele ser unos pocos dólares por operación. Se descuenta del resultado simulado.", group = grp_plan)
 show_hud_sn = input.bool(true, "Mostrar panel de estado del día", group = grp_plan)
+hud_size_opt_sn = input.string("Grande", "Tamaño del panel de estado", options = ["Auto (adaptable móvil/PC)", "Normal", "Grande", "Enorme"], tooltip = "Auto se escala solo según el tamaño de la pantalla (ideal para alternar PC y celular). En PC con pantalla grande, Grande o Enorme se leen mejor.", group = grp_plan)
+hud_pos_opt_sn = input.string("Arriba derecha", "Posición del panel", options = ["Arriba derecha", "Arriba izquierda", "Abajo derecha", "Abajo izquierda", "Centro derecha"], group = grp_plan)
 
 // Estado diario (se reinicia cada nuevo día en hora de Bogotá)
 var int tradesToday_sn = 0
@@ -1069,26 +1071,29 @@ if inTrade_sn
 // =====================================================================================
 // PANEL DE ESTADO DEL DÍA (HUD)
 // =====================================================================================
-var table hud_sn = table.new(position.top_right, 2, 5, border_width = 1, frame_color = color.new(color.gray, 50), frame_width = 1)
+hud_pos_sn = hud_pos_opt_sn == "Arriba izquierda" ? position.top_left : hud_pos_opt_sn == "Abajo derecha" ? position.bottom_right : hud_pos_opt_sn == "Abajo izquierda" ? position.bottom_left : hud_pos_opt_sn == "Centro derecha" ? position.middle_right : position.top_right
+var table hud_sn = table.new(hud_pos_sn, 2, 5, border_width = 2, frame_color = color.new(color.gray, 30), frame_width = 2)
 if barstate.islast and show_hud_sn
+    // size.auto escala el texto según la pantalla -> se adapta a PC y celular
+    hud_txt_size_sn = hud_size_opt_sn == "Auto (adaptable móvil/PC)" ? size.auto : hud_size_opt_sn == "Normal" ? size.normal : hud_size_opt_sn == "Enorme" ? size.huge : size.large
     estado_txt_sn = inTrade_sn ? "🟡 En operación" : dayWon_sn and stop_after_win_sn ? "✅ Meta del día" : limitReached_sn ? "⛔ Límite diario" : secondEntryBlocked_sn ? "✅ 1ª ganó: fin" : "🟢 Operable"
     estado_col_sn = inTrade_sn ? color.new(color.orange, 20) : (dayWon_sn and stop_after_win_sn) ? color.new(color.green, 20) : (limitReached_sn or secondEntryBlocked_sn) ? color.new(color.gray, 20) : color.new(color.teal, 20)
     pl_col_sn = dailyPL_sn > 0 ? color.new(color.green, 20) : dailyPL_sn < 0 ? color.new(color.red, 20) : color.new(color.gray, 30)
 
-    table.cell(hud_sn, 0, 0, "PLAN XAUUSD", text_color = color.white, text_size = size.small, bgcolor = color.new(color.blue, 0))
-    table.cell(hud_sn, 1, 0, "$" + str.tostring(risk_usd, "0") + " (" + str.tostring(use_pct_risk_sn ? risk_pct_sn : risk_usd / account_size_sn * 100, "0.0") + "%) · RR " + str.tostring(rr_sniper, "0.0"), text_color = color.white, text_size = size.small, bgcolor = color.new(color.blue, 0))
+    table.cell(hud_sn, 0, 0, "PLAN XAUUSD", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.blue, 0))
+    table.cell(hud_sn, 1, 0, "$" + str.tostring(risk_usd, "0") + " (" + str.tostring(use_pct_risk_sn ? risk_pct_sn : risk_usd / account_size_sn * 100, "0.0") + "%) · RR " + str.tostring(rr_sniper, "0.0"), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.blue, 0))
 
-    table.cell(hud_sn, 0, 1, "Operaciones hoy", text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))
-    table.cell(hud_sn, 1, 1, str.tostring(tradesToday_sn) + " / " + str.tostring(max_trades_day_sn), text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))
+    table.cell(hud_sn, 0, 1, "Operaciones hoy", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
+    table.cell(hud_sn, 1, 1, str.tostring(tradesToday_sn) + " / " + str.tostring(max_trades_day_sn), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
 
-    table.cell(hud_sn, 0, 2, "Pérdidas hoy", text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))
-    table.cell(hud_sn, 1, 2, str.tostring(lossesToday_sn), text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))
+    table.cell(hud_sn, 0, 2, "Pérdidas hoy", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
+    table.cell(hud_sn, 1, 2, str.tostring(lossesToday_sn), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
 
-    table.cell(hud_sn, 0, 3, "P&L del día", text_color = color.white, text_size = size.small, bgcolor = pl_col_sn)
-    table.cell(hud_sn, 1, 3, "$" + str.tostring(dailyPL_sn, "0.0"), text_color = color.white, text_size = size.small, bgcolor = pl_col_sn)
+    table.cell(hud_sn, 0, 3, "P&L del día", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = pl_col_sn)
+    table.cell(hud_sn, 1, 3, "$" + str.tostring(dailyPL_sn, "0.0"), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = pl_col_sn)
 
-    table.cell(hud_sn, 0, 4, "Estado", text_color = color.white, text_size = size.small, bgcolor = estado_col_sn)
-    table.cell(hud_sn, 1, 4, estado_txt_sn, text_color = color.white, text_size = size.small, bgcolor = estado_col_sn)
+    table.cell(hud_sn, 0, 4, "Estado", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = estado_col_sn)
+    table.cell(hud_sn, 1, 4, estado_txt_sn, text_color = color.white, text_size = hud_txt_size_sn, bgcolor = estado_col_sn)
 
 // =====================================================================================
 // DIAGNÓSTICO
