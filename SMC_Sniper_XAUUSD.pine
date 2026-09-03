@@ -1083,7 +1083,7 @@ if inTrade_sn
       size = size.small)
 
     if not alerted400_sn and floatingPL_sn >= meta_flotante_sn
-        alert("Ganancia flotante $" + str.tostring(floatingPL_sn, "0") + " — considera mover el SL a breakeven para asegurar la operación.", alert.freq_once_per_bar)
+        alert("⚖️ BREAKEVEN — XAUUSD\nGanancia flotante $" + str.tostring(floatingPL_sn, "0") + ". Mueve el SL al punto de entrada para asegurar la operación.", alert.freq_once_per_bar)
         alerted400_sn := true
 
     hitTP_sn = bar_index > tradeEntryBar_sn and (tradeIsLong_sn ? high >= tradeTP_sn : low <= tradeTP_sn)
@@ -1100,6 +1100,12 @@ if inTrade_sn
         bool won_sn = hitTP_sn and not hitSL_sn
         float grossPL_sn = won_sn ? (tradeIsLong_sn ? (tradeTP_sn - tradeEntry_sn) : (tradeEntry_sn - tradeTP_sn)) * tradeLote_sn * 100 : (tradeIsLong_sn ? (tradeSL_sn - tradeEntry_sn) : (tradeEntry_sn - tradeSL_sn)) * tradeLote_sn * 100
         float resultPL_sn = grossPL_sn - cost_per_trade_sn
+
+        // Notificación push/email de cierre (TP o SL) — llega por "Any alert() function call"
+        alert((won_sn ? "✅ TP ALCANZADO — XAUUSD" : "🛑 SL ALCANZADO — XAUUSD") +
+          " (" + (tradeIsLong_sn ? "compra" : "venta") + ")" +
+          "\nResultado: " + (resultPL_sn >= 0 ? "+$" : "-$") + str.tostring(math.abs(resultPL_sn), "0.00") +
+          " @ " + str.tostring(won_sn ? tradeTP_sn : tradeSL_sn, "#.##"), alert.freq_once_per_bar)
 
         // Actualiza el estado diario del plan
         dailyPL_sn := dailyPL_sn + resultPL_sn
