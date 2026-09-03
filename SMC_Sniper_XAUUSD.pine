@@ -805,8 +805,15 @@ show_hist = input.bool(true, "Mostrar Histórico de Señales", group = grp_snipe
 compact_labels_sn = input.bool(true, "Etiquetas compactas (detalle completo en el tooltip al pasar el mouse)", group = grp_sniper)
 max_hist_sn = input.int(30, "Máximo de señales históricas con etiqueta", minval = 1, maxval = 200, group = grp_sniper)
 show_marks_sn = input.bool(true, "Marcas de señal persistentes (triángulos, no se borran al desplazar)", group = grp_sniper)
-risk_usd = input.float(100.0, "Riesgo por Operación ($) — 1% de la cuenta", tooltip = "Según tu plan: 100 (1% de 10.000) o 75. El TP se calcula como Riesgo × RR.", group = grp_sniper)
-rr_sniper = input.float(1.5, "Ratio Riesgo/Beneficio (1.5 a 2.0)", minval = 1.0, step = 0.1, tooltip = "Profit por operación = Riesgo × RR. Riesgo 100 y RR 1.5 -> $150. Para ~$180-190 usa RR 1.8-1.9, o riesgo 95 con RR 2.0.", group = grp_sniper)
+// ----- Riesgo como % de la cuenta (se adapta al tamaño real, evita sobre-apalancar cuentas pequeñas) -----
+account_size_sn = input.float(5000.0, "Tamaño de la cuenta ($)", minval = 1, tooltip = "Tu cuenta de fondeo. El riesgo se calcula como un % de este monto.", group = grp_sniper)
+use_pct_risk_sn = input.bool(true, "Riesgo como % de la cuenta (recomendado)", tooltip = "ON: arriesga un % fijo de la cuenta (se adapta al tamaño real). OFF: usa el monto fijo en $ de abajo.", group = grp_sniper)
+risk_pct_sn = input.float(1.0, "Riesgo por operación (% de la cuenta)", minval = 0.1, maxval = 5.0, step = 0.1, tooltip = "1% de 5.000 = $50. Para fondeo estricto usa 0.5% ($25).", group = grp_sniper)
+risk_usd_manual_sn = input.float(50.0, "Riesgo fijo por operación ($) — solo si el % está OFF", group = grp_sniper)
+max_lot_sn = input.float(0.20, "Lote máximo permitido (tope de seguridad)", minval = 0.01, step = 0.01, tooltip = "Protege contra SL muy cortos que inflan el lote. Para una cuenta de 5k, 0.10-0.20 es prudente.", group = grp_sniper)
+// @variable riesgo en $ por operación (base, antes del ajuste por fuerza)
+risk_usd = use_pct_risk_sn ? account_size_sn * risk_pct_sn / 100.0 : risk_usd_manual_sn
+rr_sniper = input.float(1.5, "Ratio Riesgo/Beneficio (1.5 a 2.0)", minval = 1.0, step = 0.1, tooltip = "Profit por operación = Riesgo × RR. Riesgo 50 (1% de 5k) y RR 1.5 -> $75. Para ~$100 usa RR 2.0.", group = grp_sniper)
 
 require_confirmed_sn = input.bool(true, "Confirmar solo al cierre de vela (evita repintado)", group = grp_sniper)
 use_adx_sn = input.bool(true, "Filtrar señales en rango con ADX (recomendado)", tooltip = "Evita operar en mercados laterales donde el cruce de RSI da señales falsas.", group = grp_sniper)
@@ -944,7 +951,7 @@ if long_sn or short_sn
     float strength_score_sn = (adx_component_sn + confluence_component_sn) / 2.0
 
     float effective_risk_sn = use_strength_sizing_sn ? risk_usd * (min_risk_pct_sn + (1 - min_risk_pct_sn) * strength_score_sn) : risk_usd
-    float lote_p = dist_p > 0 ? math.min(effective_risk_sn / (dist_p * 100), 0.50) : 0.50
+    float lote_p = dist_p > 0 ? math.min(effective_risk_sn / (dist_p * 100), max_lot_sn) : max_lot_sn
 
     float pad_sn = close * 0.0015
     float y_pos_sn = long_sn ? low - pad_sn : high + pad_sn
@@ -1069,7 +1076,7 @@ if barstate.islast and show_hud_sn
     pl_col_sn = dailyPL_sn > 0 ? color.new(color.green, 20) : dailyPL_sn < 0 ? color.new(color.red, 20) : color.new(color.gray, 30)
 
     table.cell(hud_sn, 0, 0, "PLAN XAUUSD", text_color = color.white, text_size = size.small, bgcolor = color.new(color.blue, 0))
-    table.cell(hud_sn, 1, 0, str.tostring(risk_usd, "0") + "$ · RR " + str.tostring(rr_sniper, "0.0"), text_color = color.white, text_size = size.small, bgcolor = color.new(color.blue, 0))
+    table.cell(hud_sn, 1, 0, "$" + str.tostring(risk_usd, "0") + " (" + str.tostring(use_pct_risk_sn ? risk_pct_sn : risk_usd / account_size_sn * 100, "0.0") + "%) · RR " + str.tostring(rr_sniper, "0.0"), text_color = color.white, text_size = size.small, bgcolor = color.new(color.blue, 0))
 
     table.cell(hud_sn, 0, 1, "Operaciones hoy", text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))
     table.cell(hud_sn, 1, 1, str.tostring(tradesToday_sn) + " / " + str.tostring(max_trades_day_sn), text_color = color.white, text_size = size.small, bgcolor = color.new(color.gray, 20))

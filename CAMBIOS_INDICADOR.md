@@ -20,28 +20,41 @@ editor Pine de TradingView y añádelo al gráfico de XAUUSD.
 - **2ª entrada solo tras pérdida:** si la 1ª pierde, se permite una segunda (y última) entrada. Si la 1ª gana, se cierra el día.
 - **Panel de estado (HUD)** arriba a la derecha: operaciones usadas, pérdidas, P&L del día y estado (🟢 Operable / 🟡 En operación / ✅ Meta del día / ⛔ Límite).
 
-## 3. Riesgo y beneficio según el plan
+## 3. Riesgo por % de la cuenta (v2.1 — corrige el sobre-apalancamiento)
 
-- **Riesgo por operación:** `$100` por defecto (1%). Cámbialo a `75` si es lo que arriesgas.
-- **RR:** `1.5` por defecto.
+**Problema detectado:** un riesgo fijo de `$100` en una cuenta de **$5.000 es el 2%**, no el 1%,
+y forzaba lotes altos (0.10) con SL cortos de M15. Ahora el riesgo se calcula como **% del
+tamaño real de la cuenta**, por lo que se adapta solo.
+
+- **Tamaño de la cuenta ($):** `5000` por defecto.
+- **Riesgo como % de la cuenta:** `ON` (recomendado).
+- **Riesgo por operación (%):** `1.0` → **$50** en una cuenta de 5k. Usa `0.5%` ($25) para fondeo estricto.
+- **Lote máximo permitido:** `0.20` (tope de seguridad para SL muy cortos).
 - **El beneficio es determinista:** `Profit = Riesgo × RR`.
 
-| Riesgo | RR | Beneficio |
-|---|---|---|
-| 100 | 1.5 | **$150** |
-| 100 | 1.8 | **$180** |
-| 95 | 2.0 | **$190** |
-| 75 | 2.0 | **$150** |
+| Cuenta | Riesgo % | Riesgo $ | RR | Beneficio |
+|---|---|---|---|---|
+| 5.000 | 1.0% | $50 | 1.5 | **$75** |
+| 5.000 | 1.0% | $50 | 2.0 | **$100** |
+| 5.000 | 0.5% | $25 | 2.0 | **$50** |
+| 10.000 | 1.0% | $100 | 1.5 | **$150** |
 
-> Para mantener el beneficio fijo del plan, deja **OFF** "Ajustar lote según fuerza de la señal".
-> Con esa opción en ON el lote (y por tanto el riesgo y el beneficio) se reduce en señales débiles.
+> ⚠️ **Fondeo:** con drawdown diario típico ~5% ($250 en 5k), 2 operaciones a 1% ($50) arriesgan
+> $100/día. A 2% ($100) rozarías el límite. Mantén 0.5%–1%.
+>
+> Para un beneficio fijo, deja **OFF** "Ajustar lote según fuerza de la señal" (en ON reduce
+> lote/riesgo/beneficio en señales débiles).
 
 ## 4. Cálculo del lote
 
-`lote = riesgo / (distancia_SL_en_$ × 100)`, con tope de `0.50` lotes.
+`lote = riesgo / (distancia_SL_en_$ × 100)`, con tope configurable (`0.20` por defecto).
 Es correcto para XAUUSD estándar (100 oz → $100 por cada $1 de movimiento por lote).
 El SL usa **ATR × 1.0** por defecto (distancias consistentes), por lo que el profit en $
 sale siempre igual a `Riesgo × RR` independientemente de la volatilidad.
+
+> **SL corto en M15:** cuanto más ajustado el SL, mayor el lote para el mismo riesgo en $.
+> Si quieres lotes más pequeños, sube el múltiplo ATR del SL (1.5) o busca entradas con más
+> recorrido. El tope de lote evita que un SL muy corto dispare el tamaño.
 
 ## 5. Horario
 
