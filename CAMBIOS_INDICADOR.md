@@ -60,10 +60,25 @@ sale siempre igual a `Riesgo × RR` independientemente de la volatilidad.
 > Si quieres lotes más pequeños, sube el múltiplo ATR del SL (1.5) o busca entradas con más
 > recorrido. El tope de lote evita que un SL muy corto dispare el tamaño.
 
-## 5. Horario
+## 5. Sesiones Londres y New York (independientes)
 
-Por defecto **06:00–11:00 hora Colombia** (solape Londres/NY, la mejor ventana del oro).
-Ajústalo en el grupo "🎯 Sniper Settings".
+En el grupo **"🕐 Sesiones (horario Colombia, UTC-5)"** hay **dos bloques separados**, cada uno
+con su propio cupo de operaciones y sus propios contadores:
+
+| Sesión | Ventana por defecto (COL) | Cupo | Reglas |
+|---|---|---|---|
+| 🇬🇧 Londres | **02:00 – 08:00** | **2** | Para si gana · 2ª entrada solo tras pérdida |
+| 🇺🇸 New York | **08:00 – 16:00** | **2** | Igual, independiente de Londres |
+
+- Son **independientes**: si un día no operas en Londres, New York conserva sus 2 entradas.
+- Cada sesión aplica por separado "detener al ganar" y "2ª entrada tras pérdida".
+- Puedes **desactivar** una sesión con su casilla, o cambiar horas y cupo.
+- El **panel HUD** muestra una fila por sesión (`🇬🇧 Londres 1/2`, `🇺🇸 New York 0/2`),
+  resalta la sesión activa y marca ✅ (meta) o ⛔ (cupo agotado).
+
+> ⏰ **Horario de verano (DST):** los valores están en hora Colombia (UTC-5) para horario
+> estándar. En verano de EE.UU./Europa resta ~1 hora a las ventanas. Ajusta las horas si ves
+> que las señales caen fuera de la sesión real.
 
 ---
 

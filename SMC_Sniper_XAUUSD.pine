@@ -824,10 +824,28 @@ use_internal_trend_sn = input.bool(false, "Exigir también estructura interna en
 strict_buy_sn = input.bool(false, "Modo estricto SOLO para compras", group = grp_sniper)
 rsi_oversold_buy_sn = input.float(35, "RSI máximo para permitir compra (modo estricto)", group = grp_sniper)
 
-start_hour_sn = input.int(6, "Hora inicio sesión Sniper (COL)", minval = 0, maxval = 23, tooltip = "Por defecto 06:00-11:00 COL: solape Londres/NY, la mejor ventana para el oro.", group = grp_sniper)
-start_min_sn = input.int(0, "Minuto inicio sesión Sniper (COL)", minval = 0, maxval = 59, group = grp_sniper)
-end_hour_sn = input.int(11, "Hora fin sesión Sniper (COL)", minval = 0, maxval = 23, group = grp_sniper)
-end_min_sn = input.int(0, "Minuto fin sesión Sniper (COL)", minval = 0, maxval = 59, group = grp_sniper)
+// ----- Sesiones Londres y Nueva York (horario Colombia, UTC-5) -----
+// Cada sesión tiene su propio presupuesto de operaciones y contadores independientes.
+// Nota DST: en horario de verano de EE.UU./Europa, resta ~1 hora a estos valores.
+grp_sess = "🕐 Sesiones (horario Colombia, UTC-5)"
+use_london_sn = input.bool(true, "Operar sesión de LONDRES", group = grp_sess)
+lon_sh_sn = input.int(2, "Londres — inicio (hora)", minval = 0, maxval = 23, inline = "lon1", group = grp_sess)
+lon_sm_sn = input.int(0, ":", minval = 0, maxval = 59, inline = "lon1", group = grp_sess)
+lon_eh_sn = input.int(8, "Londres — fin (hora)", minval = 0, maxval = 23, inline = "lon2", group = grp_sess)
+lon_em_sn = input.int(0, ":", minval = 0, maxval = 59, inline = "lon2", group = grp_sess)
+max_trades_london_sn = input.int(2, "Máx. operaciones en Londres", minval = 1, maxval = 5, group = grp_sess)
+use_ny_sn = input.bool(true, "Operar sesión de NEW YORK", group = grp_sess)
+ny_sh_sn = input.int(8, "New York — inicio (hora)", minval = 0, maxval = 23, inline = "ny1", group = grp_sess)
+ny_sm_sn = input.int(0, ":", minval = 0, maxval = 59, inline = "ny1", group = grp_sess)
+ny_eh_sn = input.int(16, "New York — fin (hora)", minval = 0, maxval = 23, inline = "ny2", group = grp_sess)
+ny_em_sn = input.int(0, ":", minval = 0, maxval = 59, inline = "ny2", group = grp_sess)
+max_trades_ny_sn = input.int(2, "Máx. operaciones en New York", minval = 1, maxval = 5, group = grp_sess)
+
+// @function true si la hora:minuto actual está dentro de la ventana [sh:sm, eh:em]
+inWindow_sn(int h, int mn, int sh, int sm, int eh, int em) =>
+    afterStart = h > sh or (h == sh and mn >= sm)
+    beforeEnd = h < eh or (h == eh and mn <= em)
+    afterStart and beforeEnd
 
 // ----- Seguimiento de ganancia flotante (avisa para mover SL a breakeven) -----
 meta_flotante_sn = input.float(90, "Ganancia flotante para avisar mover SL a BE ($)", tooltip = "Aviso a mitad de camino del TP para asegurar la operación moviendo el SL a breakeven.", group = grp_sniper)
@@ -859,7 +877,7 @@ min_risk_pct_sn = input.float(0.5, "Riesgo minimo si la señal es debil (% del r
 // GESTIÓN DIARIA SEGÚN EL PLAN DE TRADING
 // =====================================================================================
 grp_plan = "📋 Gestión según Plan de Trading"
-max_trades_day_sn = input.int(2, "Máximo de operaciones por día", minval = 1, maxval = 5, tooltip = "Según tu plan: 1 o 2 operaciones por día.", group = grp_plan)
+// El máximo de operaciones ahora es POR SESIÓN (ver grupo "🕐 Sesiones"): 2 en Londres + 2 en NY.
 stop_after_win_sn = input.bool(true, "Detener el día tras una operación ganadora (meta del día alcanzada)", tooltip = "Si una operación llega al TP, no se toman más entradas ese día.", group = grp_plan)
 allow_second_after_loss_sn = input.bool(true, "Permitir 2ª entrada solo si la 1ª perdió", tooltip = "Coherente con el plan: tras una pérdida se considera una segunda (y última) entrada.", group = grp_plan)
 cost_per_trade_sn = input.float(0.0, "Costo estimado por operación (spread+comisión, $)", minval = 0, tooltip = "Para XAUUSD suele ser unos pocos dólares por operación. Se descuenta del resultado simulado.", group = grp_plan)
@@ -868,17 +886,25 @@ hud_size_opt_sn = input.string("Grande", "Tamaño del panel de estado", options 
 hud_pos_opt_sn = input.string("Arriba derecha", "Posición del panel", options = ["Arriba derecha", "Arriba izquierda", "Abajo derecha", "Abajo izquierda", "Centro derecha"], group = grp_plan)
 
 // Estado diario (se reinicia cada nuevo día en hora de Bogotá)
-var int tradesToday_sn = 0
-var int lossesToday_sn = 0
-var bool dayWon_sn = false
+// Estado POR SESIÓN (se reinicia cada nuevo día en hora de Bogotá)
+var int trLon_sn = 0
+var int lossLon_sn = 0
+var bool wonLon_sn = false
+var int trNy_sn = 0
+var int lossNy_sn = 0
+var bool wonNy_sn = false
 var float dailyPL_sn = 0.0
 var int lastDay_sn = na
+var string tradeSess_sn = na
 
 curDay_sn = dayofmonth(time, "America/Bogota")
 if na(lastDay_sn) or curDay_sn != lastDay_sn
-    tradesToday_sn := 0
-    lossesToday_sn := 0
-    dayWon_sn := false
+    trLon_sn := 0
+    lossLon_sn := 0
+    wonLon_sn := false
+    trNy_sn := 0
+    lossNy_sn := 0
+    wonNy_sn := false
     dailyPL_sn := 0.0
     lastDay_sn := curDay_sn
 
@@ -909,7 +935,11 @@ rsi_buy_ok_sn = not strict_buy_sn or rsi_val_sn < rsi_oversold_buy_sn
 // 3. Horario configurable
 h_sn = hour(time, "America/Bogota")
 mn_sn = minute(time, "America/Bogota")
-in_time = (h_sn > start_hour_sn or (h_sn == start_hour_sn and mn_sn >= start_min_sn)) and (h_sn < end_hour_sn or (h_sn == end_hour_sn and mn_sn <= end_min_sn))
+inLondon_sn = use_london_sn and inWindow_sn(h_sn, mn_sn, lon_sh_sn, lon_sm_sn, lon_eh_sn, lon_em_sn)
+inNy_sn = use_ny_sn and inWindow_sn(h_sn, mn_sn, ny_sh_sn, ny_sm_sn, ny_eh_sn, ny_em_sn)
+// Prioridad a NY si las ventanas llegaran a solaparse
+curSess_sn = inNy_sn ? "NY" : inLondon_sn ? "LON" : "NONE"
+in_time = curSess_sn != "NONE"
 
 // Señal "cruda" (setup técnico) antes de aplicar la gestión diaria del plan
 long_raw_sn = in_time and c_up and trending_ok_sn and bar_confirmed_sn and smc_trend_ok_up and internal_trend_ok_up and rsi_buy_ok_sn
@@ -919,10 +949,16 @@ short_raw_sn = in_time and c_dn and trending_ok_sn and bar_confirmed_sn and smc_
 // Se puede operar solo si: no hay una operación abierta (corrige el bug de sobrescritura),
 // no se alcanzó el máximo diario, no se cumplió ya la meta del día, y la 2ª entrada solo
 // se permite si la primera fue una pérdida.
-limitReached_sn = tradesToday_sn >= max_trades_day_sn
-metaReached_sn = stop_after_win_sn and dayWon_sn
-secondEntryBlocked_sn = allow_second_after_loss_sn and tradesToday_sn >= 1 and lossesToday_sn == 0
-can_trade_sn = not inTrade_sn and not limitReached_sn and not metaReached_sn and not secondEntryBlocked_sn
+// Contadores de la sesión activa (Londres o NY)
+sessTrades_sn = curSess_sn == "NY" ? trNy_sn : trLon_sn
+sessLosses_sn = curSess_sn == "NY" ? lossNy_sn : lossLon_sn
+sessWon_sn = curSess_sn == "NY" ? wonNy_sn : wonLon_sn
+sessMax_sn = curSess_sn == "NY" ? max_trades_ny_sn : max_trades_london_sn
+
+limitReached_sn = in_time and sessTrades_sn >= sessMax_sn
+metaReached_sn = in_time and stop_after_win_sn and sessWon_sn
+secondEntryBlocked_sn = in_time and allow_second_after_loss_sn and sessTrades_sn >= 1 and sessLosses_sn == 0
+can_trade_sn = in_time and not inTrade_sn and not limitReached_sn and not metaReached_sn and not secondEntryBlocked_sn
 
 long_sn = long_raw_sn and can_trade_sn
 short_sn = short_raw_sn and can_trade_sn
@@ -972,7 +1008,7 @@ if long_sn or short_sn
       "\nBeneficio objetivo: $" + str.tostring(effective_risk_sn * rr_sniper, "0") +
       "\nFuerza señal: " + str.tostring(strength_score_sn * 100, "0") + "% (ADX:" + str.tostring(adx_component_sn * 100, "0") + "% Confluencia:" + str.tostring(confluence_component_sn * 100, "0") + "%)" +
       "\nADX (info): " + str.tostring(adx_val_sn, "0.0") +
-      "\nOperación del día: " + str.tostring(tradesToday_sn + 1) + " de " + str.tostring(max_trades_day_sn)
+      "\nSesión: " + (curSess_sn == "NY" ? "New York" : "Londres") + " (operación " + str.tostring(sessTrades_sn + 1) + " de " + str.tostring(sessMax_sn) + ")"
 
     last_signal_lbl := label.new(bar_index, y_pos_sn,
       text = text_sn,
@@ -988,6 +1024,7 @@ if long_sn or short_sn
             label.delete(histSignalLabels_sn.shift())
 
     inTrade_sn := true
+    tradeSess_sn := curSess_sn
     tradeEntry_sn := ent_sn
     tradeSL_sn := sl_sn
     tradeTP_sn := tp_sn
@@ -1047,12 +1084,19 @@ if inTrade_sn
         float resultPL_sn = grossPL_sn - cost_per_trade_sn
 
         // Actualiza el estado diario del plan
-        tradesToday_sn := tradesToday_sn + 1
         dailyPL_sn := dailyPL_sn + resultPL_sn
-        if won_sn
-            dayWon_sn := true
+        if tradeSess_sn == "NY"
+            trNy_sn := trNy_sn + 1
+            if won_sn
+                wonNy_sn := true
+            else
+                lossNy_sn := lossNy_sn + 1
         else
-            lossesToday_sn := lossesToday_sn + 1
+            trLon_sn := trLon_sn + 1
+            if won_sn
+                wonLon_sn := true
+            else
+                lossLon_sn := lossLon_sn + 1
 
         if not show_hist
             label.delete(resultLabel_sn)
@@ -1072,28 +1116,41 @@ if inTrade_sn
 // PANEL DE ESTADO DEL DÍA (HUD)
 // =====================================================================================
 hud_pos_sn = hud_pos_opt_sn == "Arriba izquierda" ? position.top_left : hud_pos_opt_sn == "Abajo derecha" ? position.bottom_right : hud_pos_opt_sn == "Abajo izquierda" ? position.bottom_left : hud_pos_opt_sn == "Centro derecha" ? position.middle_right : position.top_right
-var table hud_sn = table.new(hud_pos_sn, 2, 5, border_width = 2, frame_color = color.new(color.gray, 30), frame_width = 2)
+var table hud_sn = table.new(hud_pos_sn, 2, 6, border_width = 2, frame_color = color.new(color.gray, 30), frame_width = 2)
 if barstate.islast and show_hud_sn
     // size.auto escala el texto según la pantalla -> se adapta a PC y celular
     hud_txt_size_sn = hud_size_opt_sn == "Auto (adaptable móvil/PC)" ? size.auto : hud_size_opt_sn == "Normal" ? size.normal : hud_size_opt_sn == "Enorme" ? size.huge : size.large
-    estado_txt_sn = inTrade_sn ? "🟡 En operación" : dayWon_sn and stop_after_win_sn ? "✅ Meta del día" : limitReached_sn ? "⛔ Límite diario" : secondEntryBlocked_sn ? "✅ 1ª ganó: fin" : "🟢 Operable"
-    estado_col_sn = inTrade_sn ? color.new(color.orange, 20) : (dayWon_sn and stop_after_win_sn) ? color.new(color.green, 20) : (limitReached_sn or secondEntryBlocked_sn) ? color.new(color.gray, 20) : color.new(color.teal, 20)
+
+    // ¿Cada sesión terminó su cupo? (por meta, por límite o porque la 1ª ganó)
+    lonDone_sn = (stop_after_win_sn and wonLon_sn) or trLon_sn >= max_trades_london_sn or (allow_second_after_loss_sn and trLon_sn >= 1 and lossLon_sn == 0)
+    nyDone_sn = (stop_after_win_sn and wonNy_sn) or trNy_sn >= max_trades_ny_sn or (allow_second_after_loss_sn and trNy_sn >= 1 and lossNy_sn == 0)
+    lonTxt_sn = str.tostring(trLon_sn) + " / " + str.tostring(max_trades_london_sn) + (not use_london_sn ? "  (off)" : wonLon_sn ? "  ✅" : lonDone_sn ? "  ⛔" : "")
+    nyTxt_sn = str.tostring(trNy_sn) + " / " + str.tostring(max_trades_ny_sn) + (not use_ny_sn ? "  (off)" : wonNy_sn ? "  ✅" : nyDone_sn ? "  ⛔" : "")
+    lonCol_sn = curSess_sn == "LON" ? color.new(color.teal, 10) : color.new(color.gray, 25)
+    nyCol_sn = curSess_sn == "NY" ? color.new(color.teal, 10) : color.new(color.gray, 25)
+
+    sessName_sn = curSess_sn == "NY" ? "New York" : curSess_sn == "LON" ? "Londres" : "— fuera —"
+    estado_txt_sn = inTrade_sn ? "🟡 En operación" : curSess_sn == "NONE" ? "⚪ Fuera de sesión" : metaReached_sn ? "✅ Meta " + sessName_sn : limitReached_sn ? "⛔ Límite " + sessName_sn : secondEntryBlocked_sn ? "✅ 1ª ganó" : "🟢 Operable"
+    estado_col_sn = inTrade_sn ? color.new(color.orange, 20) : curSess_sn == "NONE" ? color.new(color.gray, 30) : (metaReached_sn or secondEntryBlocked_sn) ? color.new(color.green, 20) : limitReached_sn ? color.new(color.gray, 20) : color.new(color.teal, 20)
     pl_col_sn = dailyPL_sn > 0 ? color.new(color.green, 20) : dailyPL_sn < 0 ? color.new(color.red, 20) : color.new(color.gray, 30)
 
     table.cell(hud_sn, 0, 0, "PLAN XAUUSD", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.blue, 0))
     table.cell(hud_sn, 1, 0, "$" + str.tostring(risk_usd, "0") + " (" + str.tostring(use_pct_risk_sn ? risk_pct_sn : risk_usd / account_size_sn * 100, "0.0") + "%) · RR " + str.tostring(rr_sniper, "0.0"), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.blue, 0))
 
-    table.cell(hud_sn, 0, 1, "Operaciones hoy", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
-    table.cell(hud_sn, 1, 1, str.tostring(tradesToday_sn) + " / " + str.tostring(max_trades_day_sn), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
+    table.cell(hud_sn, 0, 1, "🇬🇧 Londres", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = lonCol_sn)
+    table.cell(hud_sn, 1, 1, lonTxt_sn, text_color = color.white, text_size = hud_txt_size_sn, bgcolor = lonCol_sn)
 
-    table.cell(hud_sn, 0, 2, "Pérdidas hoy", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
-    table.cell(hud_sn, 1, 2, str.tostring(lossesToday_sn), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 20))
+    table.cell(hud_sn, 0, 2, "🇺🇸 New York", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = nyCol_sn)
+    table.cell(hud_sn, 1, 2, nyTxt_sn, text_color = color.white, text_size = hud_txt_size_sn, bgcolor = nyCol_sn)
 
     table.cell(hud_sn, 0, 3, "P&L del día", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = pl_col_sn)
     table.cell(hud_sn, 1, 3, "$" + str.tostring(dailyPL_sn, "0.0"), text_color = color.white, text_size = hud_txt_size_sn, bgcolor = pl_col_sn)
 
-    table.cell(hud_sn, 0, 4, "Estado", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = estado_col_sn)
-    table.cell(hud_sn, 1, 4, estado_txt_sn, text_color = color.white, text_size = hud_txt_size_sn, bgcolor = estado_col_sn)
+    table.cell(hud_sn, 0, 4, "Sesión", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 25))
+    table.cell(hud_sn, 1, 4, sessName_sn, text_color = color.white, text_size = hud_txt_size_sn, bgcolor = color.new(color.gray, 25))
+
+    table.cell(hud_sn, 0, 5, "Estado", text_color = color.white, text_size = hud_txt_size_sn, bgcolor = estado_col_sn)
+    table.cell(hud_sn, 1, 5, estado_txt_sn, text_color = color.white, text_size = hud_txt_size_sn, bgcolor = estado_col_sn)
 
 // =====================================================================================
 // DIAGNÓSTICO
@@ -1106,8 +1163,8 @@ raw_cross_dn_sn = bar_confirmed_sn and c_dn
 blocked_up_sn = show_diag_sn and raw_cross_up_sn and not long_sn
 blocked_dn_sn = show_diag_sn and raw_cross_dn_sn and not short_sn
 
-reason_up_sn = not in_time ? "Fuera de horario" : not trending_ok_sn ? "ADX bajo (rango)" : not smc_trend_ok_up ? "Tendencia SMC en contra" : not internal_trend_ok_up ? "Estructura interna en contra" : not rsi_buy_ok_sn ? "RSI no suficientemente bajo" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite diario de operaciones" : metaReached_sn ? "Meta del día ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación ganó (no va 2ª)" : "Otro"
-reason_dn_sn = not in_time ? "Fuera de horario" : not trending_ok_sn ? "ADX bajo (rango)" : not smc_trend_ok_dn ? "Tendencia SMC en contra" : not internal_trend_ok_dn ? "Estructura interna en contra" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite diario de operaciones" : metaReached_sn ? "Meta del día ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación ganó (no va 2ª)" : "Otro"
+reason_up_sn = not in_time ? "Fuera de sesión (Londres/NY)" : not trending_ok_sn ? "ADX bajo (rango)" : not smc_trend_ok_up ? "Tendencia SMC en contra" : not internal_trend_ok_up ? "Estructura interna en contra" : not rsi_buy_ok_sn ? "RSI no suficientemente bajo" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite de la sesión alcanzado" : metaReached_sn ? "Meta de la sesión ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación de la sesión ganó (no va 2ª)" : "Otro"
+reason_dn_sn = not in_time ? "Fuera de sesión (Londres/NY)" : not trending_ok_sn ? "ADX bajo (rango)" : not smc_trend_ok_dn ? "Tendencia SMC en contra" : not internal_trend_ok_dn ? "Estructura interna en contra" : inTrade_sn ? "Ya hay una operación abierta" : limitReached_sn ? "Límite de la sesión alcanzado" : metaReached_sn ? "Meta de la sesión ya alcanzada" : secondEntryBlocked_sn ? "La 1ª operación de la sesión ganó (no va 2ª)" : "Otro"
 
 // Ancladas al precio (belowbar/abovebar): location.top/bottom se pegan al borde del
 // panel y se deslizan sobre las velas al desplazar el gráfico en vertical
